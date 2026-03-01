@@ -35,6 +35,8 @@ pub enum MeshcoreBotError {
         "failed to join channel. Try creating a channel manually using a normal Meshcore client app"
     )]
     JoinChannelError,
+    #[error("configuration value error")]
+    ConfigValueError(String),
 }
 
 /// Get the channel index of the provided public channel. If the channel
@@ -94,6 +96,7 @@ async fn handle_message(
     msg_event: MeshCoreEvent,
     test_channel: u8,
     location_info: &Option<String>,
+    ping_hop_limit: &Option<i64>,
 ) {
     match (msg_event.event_type, msg_event.payload) {
         (EventType::ContactMsgRecv, EventPayload::ContactMessage(msg)) => {
@@ -114,6 +117,15 @@ async fn handle_message(
                 }
             };
             if !msg_text.eq_ignore_ascii_case("ping") || msg.channel_idx != test_channel {
+                return;
+            }
+            if let Some(hop_limit) = ping_hop_limit
+                && msg.path_len as i64 > *hop_limit
+            {
+                info!(
+                    "ping request exceeded MESHCOREBOT_PING_HOP_LIMIT ({} > {})",
+                    msg.path_len, hop_limit
+                );
                 return;
             }
             info!("received ping from {}, replying", sender);
@@ -167,6 +179,7 @@ async fn main() -> Result<()> {
         .with_context(|| "provide a channel name using environment variable MESHCOREBOT_CHANNEL")?;
     let location_info = settings.get_string("location").ok();
     let flood_scope = settings.get_string("flood_scope").ok();
+    let ping_hop_limit = settings.get_int("ping_hop_limit").ok();
 
     if !device_name.starts_with("MeshCore-") {
         warn!(
@@ -180,6 +193,18 @@ async fn main() -> Result<()> {
     }
     if flood_scope.is_none() {
         warn!("flood scope not set, consider setting it using MESHCOREBOT_FLOOD_SCOPE");
+    }
+    if let Some(limit) = &ping_hop_limit
+        && *limit <= 0
+    {
+        return Err(MeshcoreBotError::ConfigValueError("ping_hop_limit".into())).with_context(
+            || {
+                format!(
+                    "invalid value for MESHCOREBOT_PING_HOP_LIMIT: {} <= 0",
+                    limit
+                )
+            },
+        );
     }
 
     let mut device = MeshCore::ble_connect(&device_name)
@@ -235,7 +260,14 @@ async fn main() -> Result<()> {
             .with_context(|| "trying to retrieve the next unread message")?;
         match msg_result {
             Some(msg) => {
-                handle_message(&mut device, msg, test_channel, &location_info).await;
+                handle_message(
+                    &mut device,
+                    msg,
+                    test_channel,
+                    &location_info,
+                    &ping_hop_limit,
+                )
+                .await;
             }
             None => {
                 sleep(Duration::from_millis(5000)).await;
