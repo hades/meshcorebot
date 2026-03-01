@@ -166,6 +166,7 @@ async fn main() -> Result<()> {
         .get_string("channel")
         .with_context(|| "provide a channel name using environment variable MESHCOREBOT_CHANNEL")?;
     let location_info = settings.get_string("location").ok();
+    let flood_scope = settings.get_string("flood_scope").ok();
 
     if !device_name.starts_with("MeshCore-") {
         warn!(
@@ -176,6 +177,9 @@ async fn main() -> Result<()> {
         warn!(
             "channel name provided was {channel_name}, typically channel names start with # (e.g. #{channel_name})"
         );
+    }
+    if flood_scope.is_none() {
+        warn!("flood scope not set, consider setting it using MESHCOREBOT_FLOOD_SCOPE");
     }
 
     let mut device = MeshCore::ble_connect(&device_name)
@@ -204,6 +208,21 @@ async fn main() -> Result<()> {
         .err()
     {
         warn!("encountered an error when trying to set device clock: {err:?}");
+    }
+    info!("setting flood scope");
+    if let Some(err) = device
+        .commands()
+        .lock()
+        .await
+        .set_flood_scope(match &flood_scope {
+            None => None,
+            Some(scope) if scope == "*" => None,
+            Some(scope) => Some(scope.as_str()),
+        })
+        .await
+        .err()
+    {
+        warn!("encountered an error when trying to set flood scope: {err:?}");
     }
     let test_channel = join_channel(&mut device, &channel_name).await?;
     loop {
