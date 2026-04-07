@@ -136,13 +136,14 @@ async fn handle_message(
                 .send_channel_msg(
                     test_channel,
                     &format!(
-                        "@[{}]: PONG from an automated station (via {} hop{}) {}",
+                        "@[{}]: PONG from an automated station (via {} hop{}, {}-byte hashes) {}",
                         sender,
                         msg.path_len,
                         match msg.path_len {
                             1 => "",
                             _ => "s",
                         },
+                        msg.prefix_length,
                         match location_info {
                             Some(i) => format!("Location: {}", i),
                             None => "".into(),
