@@ -136,7 +136,7 @@ async fn handle_message(
                 .send_channel_msg(
                     test_channel,
                     &format!(
-                        "@[{}]: QSL ({} hop{}) {}",
+                        "@[{}]: PONG from an automated station (via {} hop{}) {}",
                         sender,
                         msg.path_len,
                         match msg.path_len {
@@ -144,7 +144,7 @@ async fn handle_message(
                             _ => "s",
                         },
                         match location_info {
-                            Some(i) => format!("QTH {}", i),
+                            Some(i) => format!("Location: {}", i),
                             None => "".into(),
                         }
                     ),
